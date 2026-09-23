@@ -5,10 +5,10 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "scripts": {
+ "scripts": {
     "install:ci": "bash scripts/install-ci.sh",
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
-    "build": "bash scripts/build-verified.sh",
+    "build": "bash scripts/build-verified.sh && sed -i 's/00000000-0000-4000-8000-000000000000/24bbe3ac-6a89-4409-89ef-5fc4180fc2b5/g' dist/server/wrangler.json",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
