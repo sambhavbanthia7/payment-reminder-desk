@@ -1,0 +1,7 @@
+name = "payment-reminder-desk"
+compatibility_date = "2026-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jal_ilgc"
+database_id = "24bbe3ac-6a89-4409-89ef-5fc4180fc2b5"
