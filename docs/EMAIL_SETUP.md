@@ -1,7 +1,8 @@
 # Email sending setup (cPanel mailbox over SMTP)
 
-JAL's settings (24 Oct 2026): `finance@jaljoy.com` on `mail.jaljoy.com`, port 465 SSL (its certificate is valid for that name).
-Outlook uses POP (port 110), so `EMAIL_BCC=finance@jaljoy.com` replaces the IMAP Sent copy. SPF, DKIM and DMARC are present on jaljoy.com.
+If Outlook on the finance computer uses POP (incoming port 110), copies saved to the server's Sent
+folder never appear in Outlook. In that case leave `EMAIL_IMAP_HOST` blank and set `EMAIL_BCC` to the
+finance mailbox instead, so each live email also lands in its inbox.
 
 JAL's email is hosted with their website host (cPanel). Outlook is only the program staff
 read it in. The Receivables Desk sends reminders the same way Outlook does: it connects to
@@ -21,7 +22,7 @@ Template: `.dev.vars.example`. Never commit `.dev.vars`.
 | `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT` | Outgoing server. 465 means SSL and 587 means STARTTLS (worked out from the port). 25 is refused. |
 | `EMAIL_SMTP_SECURITY` | Optional override: `ssl` or `starttls` |
 | `EMAIL_IMAP_HOST`, `EMAIL_IMAP_PORT` | Incoming server, used only to save copies in Sent. Blank host means no copies. |
-| `EMAIL_BCC` | Hidden copy of every **live** email (e.g. finance@jaljoy.com), so the team sees it in Outlook whether Outlook uses POP or IMAP. Test sends skip it. |
+| `EMAIL_BCC` | Hidden copy of every **live** email (e.g. the finance mailbox), so the team sees it in Outlook whether Outlook uses POP or IMAP. Test sends skip it. |
 | `EMAIL_SENT_FOLDER` | Optional. The Sent folder is found automatically (`\Sent` flag, then `INBOX.Sent`, `Sent`, …). |
 | `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` | Display name customers see; optional different reply address |
 | `EMAIL_HOURLY_LIMIT` | The host's hourly limit. The app refuses to go over it (default 100). |
