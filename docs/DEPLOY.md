@@ -1,5 +1,15 @@
 # Deploying to Cloudflare
 
+**Live:** https://payment-reminder-desk.sambhavbanthia7.workers.dev. The Cloudflare account is
+sambhavbanthia7@gmail.com, and the D1 database is `jal_ilgc` (`24bbe3ac-6a89-4409-89ef-5fc4180fc2b5`).
+First deployed with this version on 24 Oct 2026, in test mode.
+
+To update it:
+
+```
+D1_DATABASE_ID=24bbe3ac-6a89-4409-89ef-5fc4180fc2b5 D1_DATABASE_NAME=jal_ilgc npm run deploy
+```
+
 The app runs on Cloudflare Workers with a D1 database (sign-ins, send records). Settings and
 passwords are Cloudflare secrets. The tracker Excel file stays on each user's computer.
 
