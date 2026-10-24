@@ -5,6 +5,22 @@ export class SmtpError extends Error {
   constructor(code: number, message: string) { super(message); this.code = code }
 }
 
+/** The connection failed before the server gave an answer (dropped, timed out, refused). Worth retrying. */
+export class MailConnectionError extends Error {
+  stage: string
+  constructor(stage: string, cause: unknown) {
+    super(`${stage}: ${cause instanceof Error ? cause.message : String(cause)}`)
+    this.stage = stage
+  }
+}
+
+/** Port 465 (SSL) and 587 (STARTTLS) reach the same server; if one keeps failing, try the other. */
+export function fallbackFor(server: MailServer): MailServer | null {
+  if (server.port === 465 && server.security === "ssl") return { ...server, port: 587, security: "starttls" }
+  if (server.port === 587 && server.security === "starttls") return { ...server, port: 465, security: "ssl" }
+  return null
+}
+
 type Reply = { code: number; lines: string[] }
 
 /** One authenticated SMTP connection that can send several messages in turn. */
@@ -13,23 +29,50 @@ export class SmtpSession {
   private constructor(conn: LineConnection) { this.conn = conn }
 
   static async open(openSocket: OpenSocket, server: MailServer, heloName: string): Promise<SmtpSession> {
-    const conn = new LineConnection(openSocket(server.host, server.port, server.security))
-    const session = new SmtpSession(conn)
+    let stage = "connecting"
+    let conn: LineConnection | null = null
     try {
+      conn = new LineConnection(openSocket(server.host, server.port, server.security))
+      const session = new SmtpSession(conn)
+      stage = "waiting for the greeting"
       await session.expect(await session.reply(), 220, "The mail server did not accept the connection")
+      stage = "saying hello"
       let features = await session.ehlo(heloName)
       if (server.security === "starttls") {
         if (!features.some((f) => /^STARTTLS\b/i.test(f))) throw new SmtpError(0, "The mail server does not offer STARTTLS on this port. Try port 465 with SSL.")
+        stage = "starting encryption"
         await session.command("STARTTLS", 220, "The mail server refused to start encryption")
         conn.upgrade()
         features = await session.ehlo(heloName)
       }
+      stage = "checking the password"
       await session.login(server, features)
       return session
     } catch (error) {
-      await conn.close()
-      throw error
+      await conn?.close()
+      // A reply from the server (wrong password, refused) is final; a dropped connection is not.
+      if (error instanceof SmtpError) throw error
+      throw new MailConnectionError(stage, error)
     }
+  }
+
+  /**
+   * Open a session, riding out a dropped connection: one retry on the same port, then the
+   * other standard port (465 ↔ 587). Wrong passwords and other server answers are not retried.
+   */
+  static async openWithRetry(openSocket: OpenSocket, server: MailServer, heloName: string, fallback = fallbackFor(server)): Promise<SmtpSession> {
+    const attempts = [server, server, ...(fallback ? [fallback] : [])]
+    const failures: string[] = []
+    for (const [index, target] of attempts.entries()) {
+      try {
+        return await SmtpSession.open(openSocket, target, heloName)
+      } catch (error) {
+        if (!(error instanceof MailConnectionError)) throw error
+        failures.push(`port ${target.port}, ${error.message}`)
+        if (index < attempts.length - 1) await new Promise((resolve) => setTimeout(resolve, 600))
+      }
+    }
+    throw new MailConnectionError("connecting", new Error(`the connection kept dropping (${failures.join("; ")})`))
   }
 
   private async reply(): Promise<Reply> {

@@ -17,14 +17,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "Too many wrong passwords. Wait 15 minutes before trying again, so the mail server does not block the mailbox." }, { status: 429 })
   }
   try {
-    const session = await SmtpSession.open(openSocket, withAccount(settings.smtp, email, password), email.split("@")[1])
+    const session = await SmtpSession.openWithRetry(openSocket, withAccount(settings.smtp, email, password), email.split("@")[1])
     await session.close()
   } catch (error) {
     if (error instanceof SmtpError && error.code >= 500 && error.code < 600) {
       await recordFailure()
       return Response.json({ error: "The email address or password is not correct" }, { status: 401 })
     }
-    return Response.json({ error: `Could not reach the mail server: ${error instanceof Error ? error.message : "unknown error"}` }, { status: 502 })
+    // Logged for diagnosis (visible with `wrangler tail`); never includes the password.
+    const where = (request as Request & { cf?: { colo?: string } }).cf?.colo ?? "local"
+    console.error(`[sign-in] mail server unreachable from ${where} for ${email}: ${error instanceof Error ? error.message : String(error)}`)
+    return Response.json({ error: `Could not reach the mail server (${error instanceof Error ? error.message : "unknown error"}). Please try again in a minute; if it keeps happening, tell the developer.` }, { status: 502 })
   }
   const id = await createSession(email, password)
   return Response.json({ email }, { headers: { "set-cookie": sessionCookie(request, id) } })

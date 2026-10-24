@@ -3,7 +3,7 @@ import net from "node:net"
 import { Duplex } from "node:stream"
 import test from "node:test"
 import { buildMessage, encodeHeader } from "../lib/mail/mime.ts"
-import { SmtpSession } from "../lib/mail/smtp.ts"
+import { MailConnectionError, SmtpSession, fallbackFor } from "../lib/mail/smtp.ts"
 import { appendToSent, parseList, pickSentFolder } from "../lib/mail/imap.ts"
 import { startCatcher } from "../scripts/mail-catcher.mjs"
 
@@ -84,4 +84,21 @@ test("the Sent folder is found by its flag or by common cPanel names", () => {
   assert.equal(pickSentFolder([{ flags: [], name: "INBOX" }, { flags: [], name: "INBOX.Sent" }]), "INBOX.Sent")
   assert.equal(pickSentFolder([{ flags: ["\\Sent"], name: "Sent Items" }, { flags: [], name: "INBOX.Sent" }]), "Sent Items")
   assert.equal(pickSentFolder([{ flags: [], name: "INBOX" }]), null)
+})
+
+test("a dropped connection is retried, and a wrong password is not", async (t) => {
+  const catcher = await startCatcher({ password: "secret", dropFirst: 1 }); t.after(() => catcher.close())
+  const session = await SmtpSession.openWithRetry(openSocket, server(catcher.smtpPort), "jal.example", null)
+  await session.close()
+  const failing = await startCatcher({ password: "secret" }); t.after(() => failing.close())
+  await assert.rejects(SmtpSession.openWithRetry(openSocket, server(failing.smtpPort, "wrong"), "jal.example", null), /rejected the email address or password/)
+})
+
+test("when one port keeps dropping, the other port is tried", async (t) => {
+  const dead = await startCatcher({ dropFirst: 99 }); t.after(() => dead.close())
+  const good = await startCatcher(); t.after(() => good.close())
+  const session = await SmtpSession.openWithRetry(openSocket, server(dead.smtpPort), "jal.example", server(good.smtpPort))
+  await session.close()
+  await assert.rejects(SmtpSession.openWithRetry(openSocket, server(dead.smtpPort), "jal.example", null), (e) => e instanceof MailConnectionError && /kept dropping/.test(e.message))
+  assert.deepEqual(fallbackFor({ host: "h", port: 465, security: "ssl", user: "u", password: "p" }), { host: "h", port: 587, security: "starttls", user: "u", password: "p" })
 })

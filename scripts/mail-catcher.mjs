@@ -34,7 +34,7 @@ function decodeAuthPlain(value) {
   return { user, password }
 }
 
-export async function startCatcher({ smtpPort = 0, imapPort = 0, dir = "", password = "", rejectRecipient = null, log = () => {} } = {}) {
+export async function startCatcher({ smtpPort = 0, imapPort = 0, dir = "", password = "", rejectRecipient = null, dropFirst = 0, log = () => {} } = {}) {
   const messages = [], sentCopies = []
   const save = (kind, text) => {
     if (!dir) return
@@ -43,7 +43,10 @@ export async function startCatcher({ smtpPort = 0, imapPort = 0, dir = "", passw
   }
   const authOk = (pw) => !password || pw === password
 
+  let connections = 0
   const smtp = net.createServer((socket) => {
+    // dropFirst: cut the first N connections straight away, to test how the app copes with a dropped line.
+    if (++connections <= dropFirst) { socket.destroy(); return }
     const read = lineReader(socket)
     const say = (text) => socket.write(`${text}\r\n`)
     let envelope = { from: "", to: [] }, authed = false

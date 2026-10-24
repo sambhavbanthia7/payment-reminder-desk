@@ -42,14 +42,16 @@ export async function POST(request: Request) {
 
   let session: SmtpSession
   try {
-    session = await SmtpSession.open(openSocket, withAccount(config.smtp, sender, account.password), sender.split("@")[1])
+    session = await SmtpSession.openWithRetry(openSocket, withAccount(config.smtp, sender, account.password), sender.split("@")[1])
   } catch (error) {
     if (error instanceof SmtpError && error.code >= 500 && error.code < 600) {
       // The mailbox password was changed. Sign everyone out so they sign in with the new one.
       await deleteSessionsFor(sender)
       return Response.json({ error: "The mail server no longer accepts the saved password. Sign in again with the current password.", signedOut: true }, { status: 401 })
     }
-    return Response.json({ error: error instanceof Error ? error.message : "Could not connect to the mail server" }, { status: 502 })
+    const where = (request as Request & { cf?: { colo?: string } }).cf?.colo ?? "local"
+    console.error(`[send] mail server unreachable from ${where} for ${sender}: ${error instanceof Error ? error.message : String(error)}`)
+    return Response.json({ error: `Could not reach the mail server (${error instanceof Error ? error.message : "unknown error"}). No email was sent; try again in a minute.` }, { status: 502 })
   }
 
   const results: SendResult[] = []
